@@ -15,9 +15,9 @@
 (defun compile-metal-library (&optional (lib-pathname *library-pathname*)
                                         (device *device*))
   (when-let (src (file-string lib-pathname))
-    (when *library*
+    (when (boundp '*library*)
       (objc:release *library*)
-      (setf *library* nil))
+      (makunbound '*library*))
     (fli:with-dynamic-foreign-objects ((err objc:objc-object-pointer))
       (let ((lib (objc:invoke device "newLibraryWithSource:options:error:"
                               src nil err)))
