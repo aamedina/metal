@@ -1,5 +1,8 @@
 (in-package :metal)
 
+(defvar *library-pathname*
+  (asdf:system-relative-pathname :metal "src/metal/Shaders.metal"))
+
 (defvar *view*)
 (defvar *device*)
 (defvar *library*)
@@ -12,6 +15,9 @@
 (defun compile-metal-library (&optional (lib-pathname *library-pathname*)
                                         (device *device*))
   (when-let (src (file-string lib-pathname))
+    (when *library*
+      (objc:release *library*)
+      (setf *library* nil))
     (fli:with-dynamic-foreign-objects ((err objc:objc-object-pointer))
       (let ((lib (objc:invoke device "newLibraryWithSource:options:error:"
                               src nil err)))
@@ -44,9 +50,9 @@
 
 (defun auto-compile-metal-library (&optional (lib-pathname *library-pathname*)
                                              (device *device*))
-  (when (not (boundp '*timer*))
-    (watch-file lib-pathname
-                (lambda () (compile-metal-library lib-pathname device)))))
+  (compile-metal-library lib-pathname device)
+  (watch-file lib-pathname
+              (lambda () (compile-metal-library lib-pathname device))))
 
 (defun make-texture-loader (&optional (device *device*))
   (let ((self (objc:invoke "MTKTextureLoader" "alloc")))
