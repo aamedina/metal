@@ -53,4 +53,33 @@
 (objc:define-objc-struct
     (dispatch-threadgroups-indirect-arguments
      (:foreign-name "MTLDispatchThreadgroupsIndirectArguments"))
-  (threadgroups-per-grid (:c-array :uint32 3)))
+    (threadgroups-per-grid (:c-array :uint32 3)))
+
+(fli:define-foreign-function (create-system-default-device
+                              "MTLCreateSystemDefaultDevice")
+    ()
+  :result-type objc:objc-object-pointer)
+
+(fli:define-foreign-function (model-io-vertex-descriptor-from-metal
+                              "MTKModelIOVertexDescriptorFromMetal")
+    ((metal-descriptor objc:objc-object-pointer))
+  :result-type objc:objc-object-pointer)
+
+(fli:define-foreign-function (metal-vertex-descriptor-from-model-io
+                              "MTKMetalVertexDescriptorFromModelIO")
+    ((model-io-descriptor objc:objc-object-pointer))
+  :result-type objc:objc-object-pointer)
+
+;; (fli:define-c-enum model-io-vertex-format)
+
+;; (fli:define-c-enum metal-vertex-format)
+
+;; (fli:define-foreign-function (model-io-vertex-format-from-metal
+;;                               "MTKModelIOVertexFormatFromMetal")
+;;     ((vertex-format metal-vertex-format))
+;;   :result-type model-io-vertex-format)
+
+;; (fli:define-foreign-function (metal-vertex-format-from-model-io
+;;                               "MTKMetalVertexFormatFromModelIO")
+;;     ((vertex-format model-io-vertex-format))
+;;   :result-type metal-vertex-format)
