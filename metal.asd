@@ -3,6 +3,6 @@
   :version "0.1.0"
   :author "Adrian Medina <adrian.medina@mail.yu.edu>"
   :license "GNU General Public License"
-  :pathname "src"
+  :pathname "src/lisp"
   :components ((:file "package")
                (:file "metal")))
