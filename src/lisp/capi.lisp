@@ -20,7 +20,7 @@
                                           "localizedDescription")))
             (setf *library* lib))))))
 
-(defvar *timer*)
+(defvar *timers* (make-hash-table))
 
 (defun wrap-file-watcher (pathname callback)
   (let ((last-modified-time (file-write-date pathname)))
@@ -31,14 +31,16 @@
           (funcall callback))))))
 
 (defun watch-file (pathname callback &key (timeout-ms 50))
-  (let ((watcher (wrap-file-watcher pathname callback)))
-    (setf *timer* (mp:make-named-timer 'file-watcher-timer watcher))
-    (mp:schedule-timer-milliseconds *timer* timeout-ms timeout-ms)))
+  (when (null (gethash pathname *timers*))
+    (let* ((watcher (wrap-file-watcher pathname callback))
+           (timer (mp:make-timer watcher)))
+      (setf (gethash pathname *timers*) timer)
+      (mp:schedule-timer-milliseconds timer timeout-ms timeout-ms))))
 
-(defun unwatch-file ()
-  (when (boundp '*timer*)
-    (mp:unschedule-timer *timer*)
-    (makunbound '*timer*)))
+(defun unwatch-file (pathname)
+  (when-let (timer (gethash pathname *timers*))
+    (mp:unschedule-timer timer)
+    (remhash pathname *timers*)))
 
 (defun auto-compile-metal-library (&optional (lib-pathname *library-pathname*)
                                              (device *device*))
