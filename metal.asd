@@ -5,4 +5,6 @@
   :license "GNU General Public License"
   :pathname "src/lisp"
   :components ((:file "package")
+               (:file "foreign-interface")
+               (:file "capi")
                (:file "metal")))
