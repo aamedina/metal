@@ -21,6 +21,11 @@
 (defun new (class)
   (objc:autorelease (objc:alloc-init-object class)))
 
+(defun release-var (variable)
+  (when (boundp variable)
+    (objc:release (symbol-value variable))
+    (makunbound variable)))
+
 (defun ns-error (err)
   (and (objc:objc-object-from-pointer err)
        (error (objc:invoke-into 'string (fli:dereference err)
@@ -54,9 +59,7 @@
 (defun compile-metal-library (&optional (lib-pathname *library-pathname*)
                                         (device *device*))
   (when-let (src (file-string lib-pathname))
-    (when (boundp '*library*)
-      (objc:release *library*)
-      (makunbound '*library*))
+    (release-var '*library*)
     (fli:with-dynamic-foreign-objects ((err objc:objc-object-pointer))
       (let ((lib (objc:invoke device "newLibraryWithSource:options:error:"
                               src nil err)))
@@ -184,6 +187,16 @@
      (size cocoa:ns-size))
   (objc:invoke (objc:current-super) "setFrameSize:" size))
 
+(objc:define-objc-method ("dealloc" :void)
+    ((self metal-kit-view))
+  (release-var '*command-queue*)
+  (release-var '*texture-loader*)
+  (loop
+    for pipeline being the hash-values in *pipeline-states*
+    do (objc:release pipeline))
+  (clrhash *pipeline-states*)
+  (objc:invoke (objc:current-super) "dealloc"))
+
 (defun metal-view-initializer (draw-callback offscreen-draw-callback frame)
   (lambda (pane view)
     (declare (ignore pane))
@@ -219,4 +232,4 @@
                                   :title "Metal"
                                   :best-width 1280
                                   :best-height 800
-                                  :visible-border nil)))
+                                  :window-styles '(:borderless))))
