@@ -17,6 +17,11 @@
 (defvar *buffers* (make-hash-table))
 (defvar *textures* (make-hash-table))
 
+(defun ns-error (err)
+  (and (objc:objc-object-from-pointer err)
+       (error (objc:invoke-into 'string (fli:dereference err)
+                                "localizedDescription"))))
+
 (defun compile-metal-library (&optional (lib-pathname *library-pathname*)
                                         (device *device*))
   (when-let (src (file-string lib-pathname))
@@ -26,9 +31,7 @@
     (fli:with-dynamic-foreign-objects ((err objc:objc-object-pointer))
       (let ((lib (objc:invoke device "newLibraryWithSource:options:error:"
                               src nil err)))
-        (or (and (objc:objc-object-from-pointer err)
-                 (error (objc:invoke-into 'string (fli:dereference err)
-                                          "localizedDescription")))
+        (or (ns-error err)
             (setf *library* lib))))))
 
 (defvar *timers* (make-hash-table))
@@ -100,7 +103,12 @@
      (when-let (*drawable* (objc:invoke *view* "currentDrawable"))
        (unwind-protect
             (progn
+              (loop
+                for pipeline being the hash-values in *pipeline-states*
+                do (objc:invoke *command-encoder* "setRenderPipelineState:"
+                                pipeline))
               ,@body)
+         (objc:invoke *command-encoder* "endEncoding")
          (objc:invoke *command-buffer* "presentDrawable:" *drawable*)))))
 
 (defmacro computing (&body body)
@@ -114,6 +122,36 @@
 (defmacro parallel-rendering (&body body)
   `(with-command-encoder (make-parallel-render-encoder)
      ,@body))
+
+(defun new (class)
+  (objc:autorelease (objc:alloc-init-object class)))
+
+(defvar *pipeline-states* (make-hash-table))
+
+(defun make-render-pipeline (name &key vertex-function
+                                       fragment-function
+                                       vertex-descriptor
+                                       color-attachments
+                                       depth-attachment-pixel-format
+                                       stencil-attachment-pixel-format)
+  (let ((descriptor (new "MTLRenderPipelineDescriptor")))
+    (objc:invoke descriptor "setVertexFunction:" vertex-function)
+    (objc:invoke descriptor "setFragmentFunction:" fragment-function)
+    (when vertex-descriptor
+      (objc:invoke descriptor "setVertexDescriptor:" vertex-descriptor))
+    (when color-attachments
+      (let ((arr (objc:invoke-into '(array (:unsigned :long)) descriptor
+                                   "colorAttachments")))
+        (dotimes (i (length arr))
+          (setf (aref arr i) (aref color-attachments i)))))
+    (when depth-attachment-pixel-format)
+    (when stencil-attachment-pixel-format)
+    (fli:with-dynamic-foreign-objects ((err objc:objc-object-pointer))
+      (let ((pipeline (objc:invoke *device*
+                                   "newRenderPipelineStateWithDescriptor:error:"
+                                   descriptor err)))
+        (or (ns-error err)
+            (setf (gethash name *pipeline-states*) pipeline))))))
 
 (objc:define-objc-class metal-kit-view ()
   ((draw-callback :accessor draw-callback)
@@ -176,11 +214,11 @@
 (defun default-draw-offscreen ())
 
 (defvar *pane*)
-
 (defvar *interface*)
 
 (defun test-metal-pane ()
   (setf *interface* (capi:contain (setf *pane* (make-metal-pane))
                                   :title "Metal"
                                   :best-width 1280
-                                  :best-height 800)))
+                                  :best-height 800
+                                  :visible-border nil)))
