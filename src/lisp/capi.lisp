@@ -7,10 +7,15 @@
 (defvar *device*)
 (defvar *library*)
 (defvar *descriptor*)
+(defvar *drawable*)
+(defvar *texture-loader*)
+
 (defvar *command-queue*)
 (defvar *command-buffer*)
 (defvar *command-encoder*)
-(defvar *texture-loader*)
+
+(defvar *buffers* (make-hash-table))
+(defvar *textures* (make-hash-table))
 
 (defun compile-metal-library (&optional (lib-pathname *library-pathname*)
                                         (device *device*))
@@ -65,8 +70,54 @@
     (setf *texture-loader* (make-texture-loader))
     (auto-compile-metal-library)))
 
+(defun make-render-encoder (&optional (command-buffer *command-buffer*)
+                                      (descriptor *descriptor*))
+  (objc:invoke command-buffer "renderCommandEncoderWithDescriptor:" descriptor))
+
+(defun make-compute-encoder (&optional (command-buffer *command-buffer*))
+  (objc:invoke command-buffer "computeCommandEncoder"))
+
+(defun make-blit-encoder (&optional (command-buffer *command-buffer*))
+  (objc:invoke command-buffer "blitCommandEncoder"))
+
+(defun make-parallel-render-encoder (&optional (command-buffer *command-buffer*)
+                                               (descriptor *descriptor*))
+  (objc:invoke command-buffer "parallelRenderCommandEncoderWithDescriptor:"
+               descriptor))
+
+(defmacro with-command-encoder (encoder &body body)
+  `(let* ((*descriptor* (objc:invoke *view* "currentRenderPassDescriptor"))
+          (*command-buffer* (objc:invoke *command-queue* "commandBuffer"))
+          (*command-encoder* ,encoder))
+     (unwind-protect
+          (progn
+            (objc:invoke *command-buffer* "enqueue")
+            ,@body)
+       (objc:invoke *command-buffer* "commit"))))
+
+(defmacro rendering (&body body)
+  `(with-command-encoder (make-render-encoder)
+     (let* ((*drawable* (objc:invoke *view* "currentDrawable")))
+       (unwind-protect
+            (progn
+              ,@body)
+         (objc:invoke *command-buffer* "presentDrawable:" *drawable*)))))
+
+(defmacro computing (&body body)
+  `(with-command-encoder (make-compute-encoder)
+     ,@body))
+
+(defmacro blitting (&body body)
+  `(with-command-encoder (make-blit-encoder)
+     ,@body))
+
+(defmacro parallel-rendering (&body body)
+  `(with-command-encoder (make-parallel-render-encoder)
+     ,@body))
+
 (objc:define-objc-class metal-kit-view ()
-  ((draw-callback :accessor draw-callback :type function))
+  ((draw-callback :accessor draw-callback)
+   (offscreen-draw-callback :accessor offscreen-draw-callback))
   (:objc-class-name "CLMTKView")
   (:objc-superclass-name "MTKView"))
 
@@ -88,7 +139,9 @@
   (declare (ignore rect))
   (when-let (*view* (objc:objc-object-pointer self))
     (objc:with-autorelease-pool ()
-      (funcall (draw-callback self)))))
+      (funcall (offscreen-draw-callback self))
+      (rendering
+        (funcall (draw-callback self))))))
 
 (objc:define-objc-method ("setFrameSize:" :void)
     ((self metal-kit-view)
@@ -99,18 +152,23 @@
     ((self metal-kit-view))
   t)
 
-(defun metal-view-initializer (draw-callback frame)
+(defun metal-view-initializer (draw-callback offscreen-draw-callback frame)
   (lambda (pane view)
     (declare (ignore pane))
-    (setf (draw-callback (objc:objc-object-from-pointer view)) draw-callback)
+    (let ((instance (objc:objc-object-from-pointer view)))
+      (setf (draw-callback instance) draw-callback)
+      (setf (offscreen-draw-callback instance) offscreen-draw-callback))
     (objc:invoke view "initWithFrame:" frame)))
 
-(defun make-metal-pane (&key (draw-callback #'default-draw-callback)
+(defun make-metal-pane (&key (draw-callback #'default-draw-onscreen)
+                             (offscreen-draw-callback #'default-draw-offscreen)
                              (frame #(0 0 1280 800)))
   (make-instance 'capi:cocoa-view-pane
                  :view-class "CLMTKView"
-                 :init-function (metal-view-initializer draw-callback frame)))
+                 :init-function (metal-view-initializer draw-callback
+                                                        offscreen-draw-callback
+                                                        frame)))
 
-(defun default-draw-callback ()
-  (let* ((*descriptor* (objc:invoke *view* "currentRenderPassDescriptor")))
-    *descriptor*))
+(defun default-draw-onscreen ())
+
+(defun default-draw-offscreen ())
