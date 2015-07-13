@@ -6,5 +6,4 @@
   :pathname "src/lisp"
   :components ((:file "package")
                (:file "foreign-interface")
-               (:file "capi")
                (:file "metal")))
