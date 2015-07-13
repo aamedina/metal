@@ -16,7 +16,10 @@
 
 (defvar *buffers* (make-hash-table))
 (defvar *textures* (make-hash-table))
-(defvar *pipeline-states* (make-hash-table))
+
+(defvar *render-pipeline* (make-hash-table))
+(defvar *compute-pipeline* (make-hash-table))
+(defvar *blit-pipeline* (make-hash-table))
 
 (defun new (class)
   (objc:autorelease (objc:alloc-init-object class)))
@@ -54,7 +57,7 @@
                                    "newRenderPipelineStateWithDescriptor:error:"
                                    descriptor err)))
         (or (ns-error err)
-            (setf (gethash name *pipeline-states*) pipeline))))))
+            (setf (gethash name *render-pipeline*) pipeline))))))
 
 (defun compile-metal-library (&optional (lib-pathname *library-pathname*)
                                         (device *device*))
@@ -136,7 +139,7 @@
        (unwind-protect
             (progn
               (loop
-                for pipeline being the hash-values in *pipeline-states*
+                for pipeline being the hash-values in *render-pipeline*
                 do (objc:invoke *command-encoder* "setRenderPipelineState:"
                                 pipeline))
               ,@body)
@@ -194,9 +197,9 @@
   (release-var '*command-queue*)
   (release-var '*texture-loader*)
   (loop
-    for pipeline being the hash-values in *pipeline-states*
+    for pipeline being the hash-values in *render-pipeline*
     do (objc:release pipeline))
-  (clrhash *pipeline-states*)
+  (clrhash *render-pipeline*)
   (objc:invoke (objc:current-super) "dealloc"))
 
 (defun metal-view-initializer (draw-callback offscreen-draw-callback frame)
