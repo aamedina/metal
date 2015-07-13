@@ -185,6 +185,7 @@
 (objc:define-objc-method ("setFrameSize:" :void)
     ((self metal-kit-view)
      (size cocoa:ns-size))
+  (print size)
   (objc:invoke (objc:current-super) "setFrameSize:" size))
 
 (objc:define-objc-method ("dealloc" :void)
@@ -218,6 +219,7 @@
                                                         frame)))
 
 (defvar *pane*)
+(defvar *interface*)
 
 (defun test-draw-callback ())
 
@@ -228,11 +230,12 @@
                 :draw-callback #'test-draw-callback
                 :offscreen-draw-callback #'test-offscreen-draw-callback
                 :frame #(0 0 640 400)))
-  (capi:contain *pane*
-                :title "Metal"
-                :best-x 570
-                :best-width 640
-                :best-height 400
-                :window-styles '(:internal-borderless)))
+  (setf *interface* (capi:make-container *pane*
+                                         :title ""
+                                         :window-styles '(:internal-borderless)
+                                         :best-x 570
+                                         :best-width 640
+                                         :best-height 400))
+  (capi:display *interface*))
 
 
