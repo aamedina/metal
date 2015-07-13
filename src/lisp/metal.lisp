@@ -165,7 +165,7 @@
     ((self metal-kit-view)
      (frame cocoa:ns-rect))
   (declare (ignore self))
-  (when-let (self (objc:invoke (objc:current-super) "initWithFrame:" frame))    
+  (when-let (self (objc:invoke (objc:current-super) "initWithFrame:" frame))
     (objc:invoke self "setDevice:" *device*)
     ;; MTLPixelFormatBGRA8Unorm_sRGB
     (objc:invoke self "setColorPixelFormat:" 81)
@@ -189,6 +189,7 @@
 
 (objc:define-objc-method ("dealloc" :void)
     ((self metal-kit-view))
+  (release-var '*device*)
   (release-var '*command-queue*)
   (release-var '*texture-loader*)
   (loop
@@ -217,7 +218,6 @@
                                                         frame)))
 
 (defvar *pane*)
-(defvar *interface*)
 
 (defun test-draw-callback ())
 
@@ -227,9 +227,12 @@
   (setf *pane* (make-metal-pane
                 :draw-callback #'test-draw-callback
                 :offscreen-draw-callback #'test-offscreen-draw-callback
-                :frame #(0 0 1280 800)))
-  (setf *interface* (capi:contain *pane*
-                                  :title "Metal"
-                                  :best-width 1280
-                                  :best-height 800
-                                  :window-styles '(:borderless))))
+                :frame #(0 0 640 400)))
+  (capi:contain *pane*
+                :title "Metal"
+                :best-x 570
+                :best-width 640
+                :best-height 400
+                :window-styles '(:internal-borderless)))
+
+
