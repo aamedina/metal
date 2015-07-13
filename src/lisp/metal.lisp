@@ -97,7 +97,7 @@
 
 (defmacro rendering (&body body)
   `(with-command-encoder (make-render-encoder)
-     (let* ((*drawable* (objc:invoke *view* "currentDrawable")))
+     (when-let (*drawable* (objc:invoke *view* "currentDrawable"))
        (unwind-protect
             (progn
               ,@body)
@@ -125,8 +125,7 @@
     ((self metal-kit-view)
      (frame cocoa:ns-rect))
   (declare (ignore self))
-  (when-let (self (objc:invoke (objc:current-super) "initWithFrame:" frame))
-    (initialize-metal)
+  (when-let (self (objc:invoke (objc:current-super) "initWithFrame:" frame))    
     (objc:invoke self "setDevice:" *device*)
     ;; MTLPixelFormatBGRA8Unorm_sRGB
     (objc:invoke self "setColorPixelFormat:" 81)
@@ -155,14 +154,17 @@
 (defun metal-view-initializer (draw-callback offscreen-draw-callback frame)
   (lambda (pane view)
     (declare (ignore pane))
-    (let ((instance (objc:objc-object-from-pointer view)))
+    (let ((view (objc:invoke view "initWithFrame:" frame))
+          (instance (objc:objc-object-from-pointer view)))
       (setf (draw-callback instance) draw-callback)
-      (setf (offscreen-draw-callback instance) offscreen-draw-callback))
-    (objc:invoke view "initWithFrame:" frame)))
+      (setf (offscreen-draw-callback instance) offscreen-draw-callback)
+      (print instance)
+      view)))
 
 (defun make-metal-pane (&key (draw-callback #'default-draw-onscreen)
                              (offscreen-draw-callback #'default-draw-offscreen)
                              (frame #(0 0 1280 800)))
+  (initialize-metal)
   (make-instance 'capi:cocoa-view-pane
                  :view-class "CLMTKView"
                  :init-function (metal-view-initializer draw-callback
@@ -173,3 +175,12 @@
 
 (defun default-draw-offscreen ())
 
+(defvar *pane*)
+
+(defvar *interface*)
+
+(defun test-metal-pane ()
+  (setf *interface* (capi:contain (setf *pane* (make-metal-pane))
+                                  :title "Metal"
+                                  :best-width 1280
+                                  :best-height 800)))
