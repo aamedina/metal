@@ -124,7 +124,7 @@
                descriptor))
 
 (defmacro with-command-encoder (encoder &body body)
-  `(let* ((*descriptor* (objc:invoke *view* "currentRenderPassDescriptor"))
+  `(let* (
           (*command-buffer* (objc:invoke *command-queue* "commandBuffer"))
           (*command-encoder* ,encoder))
      (unwind-protect
@@ -134,17 +134,18 @@
        (objc:invoke *command-buffer* "commit"))))
 
 (defmacro rendering (&body body)
-  `(with-command-encoder (make-render-encoder)
-     (when-let (*drawable* (objc:invoke *view* "currentDrawable"))
-       (unwind-protect
-            (progn
-              (loop
-                for pipeline being the hash-values in *render-pipeline*
-                do (objc:invoke *command-encoder* "setRenderPipelineState:"
-                                pipeline))
-              ,@body)
-         (objc:invoke *command-encoder* "endEncoding")
-         (objc:invoke *command-buffer* "presentDrawable:" *drawable*)))))
+  `(let ((*descriptor* (objc:invoke *view* "currentRenderPassDescriptor")))
+     (with-command-encoder (make-render-encoder)
+       (when-let (*drawable* (objc:invoke *view* "currentDrawable"))
+         (unwind-protect
+              (progn
+                (loop
+                  for pipeline being the hash-values in *render-pipeline*
+                  do (objc:invoke *command-encoder* "setRenderPipelineState:"
+                                  pipeline))
+                ,@body)
+           (objc:invoke *command-encoder* "endEncoding")
+           (objc:invoke *command-buffer* "presentDrawable:" *drawable*))))))
 
 (defmacro computing (&body body)
   `(with-command-encoder (make-compute-encoder)
