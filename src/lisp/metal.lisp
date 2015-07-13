@@ -16,11 +16,40 @@
 
 (defvar *buffers* (make-hash-table))
 (defvar *textures* (make-hash-table))
+(defvar *pipeline-states* (make-hash-table))
+
+(defun new (class)
+  (objc:autorelease (objc:alloc-init-object class)))
 
 (defun ns-error (err)
   (and (objc:objc-object-from-pointer err)
        (error (objc:invoke-into 'string (fli:dereference err)
                                 "localizedDescription"))))
+
+(defun make-render-pipeline (name &key vertex-function
+                                       fragment-function
+                                       vertex-descriptor
+                                       color-attachments
+                                       depth-attachment-pixel-format
+                                       stencil-attachment-pixel-format)
+  (let ((descriptor (new "MTLRenderPipelineDescriptor")))
+    (objc:invoke descriptor "setVertexFunction:" vertex-function)
+    (objc:invoke descriptor "setFragmentFunction:" fragment-function)
+    (when vertex-descriptor
+      (objc:invoke descriptor "setVertexDescriptor:" vertex-descriptor))
+    (when color-attachments
+      (let ((arr (objc:invoke-into '(array (:unsigned :long)) descriptor
+                                   "colorAttachments")))
+        (dotimes (i (length arr))
+          (setf (aref arr i) (aref color-attachments i)))))
+    (when depth-attachment-pixel-format)
+    (when stencil-attachment-pixel-format)
+    (fli:with-dynamic-foreign-objects ((err objc:objc-object-pointer))
+      (let ((pipeline (objc:invoke *device*
+                                   "newRenderPipelineStateWithDescriptor:error:"
+                                   descriptor err)))
+        (or (ns-error err)
+            (setf (gethash name *pipeline-states*) pipeline))))))
 
 (defun compile-metal-library (&optional (lib-pathname *library-pathname*)
                                         (device *device*))
@@ -123,36 +152,6 @@
   `(with-command-encoder (make-parallel-render-encoder)
      ,@body))
 
-(defun new (class)
-  (objc:autorelease (objc:alloc-init-object class)))
-
-(defvar *pipeline-states* (make-hash-table))
-
-(defun make-render-pipeline (name &key vertex-function
-                                       fragment-function
-                                       vertex-descriptor
-                                       color-attachments
-                                       depth-attachment-pixel-format
-                                       stencil-attachment-pixel-format)
-  (let ((descriptor (new "MTLRenderPipelineDescriptor")))
-    (objc:invoke descriptor "setVertexFunction:" vertex-function)
-    (objc:invoke descriptor "setFragmentFunction:" fragment-function)
-    (when vertex-descriptor
-      (objc:invoke descriptor "setVertexDescriptor:" vertex-descriptor))
-    (when color-attachments
-      (let ((arr (objc:invoke-into '(array (:unsigned :long)) descriptor
-                                   "colorAttachments")))
-        (dotimes (i (length arr))
-          (setf (aref arr i) (aref color-attachments i)))))
-    (when depth-attachment-pixel-format)
-    (when stencil-attachment-pixel-format)
-    (fli:with-dynamic-foreign-objects ((err objc:objc-object-pointer))
-      (let ((pipeline (objc:invoke *device*
-                                   "newRenderPipelineStateWithDescriptor:error:"
-                                   descriptor err)))
-        (or (ns-error err)
-            (setf (gethash name *pipeline-states*) pipeline))))))
-
 (objc:define-objc-class metal-kit-view ()
   ((draw-callback :accessor draw-callback)
    (offscreen-draw-callback :accessor offscreen-draw-callback))
@@ -185,10 +184,6 @@
      (size cocoa:ns-size))
   (objc:invoke (objc:current-super) "setFrameSize:" size))
 
-(objc:define-objc-method ("acceptsFirstResponder" objc:objc-bool)
-    ((self metal-kit-view))
-  t)
-
 (defun metal-view-initializer (draw-callback offscreen-draw-callback frame)
   (lambda (pane view)
     (declare (ignore pane))
@@ -196,12 +191,11 @@
           (instance (objc:objc-object-from-pointer view)))
       (setf (draw-callback instance) draw-callback)
       (setf (offscreen-draw-callback instance) offscreen-draw-callback)
-      (print instance)
       view)))
 
-(defun make-metal-pane (&key (draw-callback #'default-draw-onscreen)
-                             (offscreen-draw-callback #'default-draw-offscreen)
-                             (frame #(0 0 1280 800)))
+(defun make-metal-pane (&key draw-callback
+                             offscreen-draw-callback
+                             frame)
   (initialize-metal)
   (make-instance 'capi:cocoa-view-pane
                  :view-class "CLMTKView"
@@ -209,15 +203,19 @@
                                                         offscreen-draw-callback
                                                         frame)))
 
-(defun default-draw-onscreen ())
-
-(defun default-draw-offscreen ())
-
 (defvar *pane*)
 (defvar *interface*)
 
+(defun test-draw-callback ())
+
+(defun test-offscreen-draw-callback ())
+
 (defun test-metal-pane ()
-  (setf *interface* (capi:contain (setf *pane* (make-metal-pane))
+  (setf *pane* (make-metal-pane
+                :draw-callback #'test-draw-callback
+                :offscreen-draw-callback #'test-offscreen-draw-callback
+                :frame #(0 0 1280 800)))
+  (setf *interface* (capi:contain *pane*
                                   :title "Metal"
                                   :best-width 1280
                                   :best-height 800
