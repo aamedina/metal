@@ -6,4 +6,8 @@
   :pathname "src/lisp"
   :components ((:file "package")
                (:file "foreign-interface")
+               (:file "objc")
+               (:file "device")
+               (:file "command-buffer")
+               (:file "command-encoder")
                (:file "metal")))

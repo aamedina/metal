@@ -105,8 +105,7 @@
   (when (not (boundp '*device*))
     (setf *device* (create-system-default-device))
     (setf *command-queue* (objc:invoke *device* "newCommandQueue"))
-    (setf *texture-loader* (make-texture-loader))
-    (auto-compile-metal-library)))
+    (setf *texture-loader* (make-texture-loader))))
 
 (defun make-render-encoder (&optional (command-buffer *command-buffer*)
                                       (descriptor *descriptor*))
@@ -124,8 +123,7 @@
                descriptor))
 
 (defmacro with-command-encoder (encoder &body body)
-  `(let* (
-          (*command-buffer* (objc:invoke *command-queue* "commandBuffer"))
+  `(let* ((*command-buffer* (objc:invoke *command-queue* "commandBuffer"))
           (*command-encoder* ,encoder))
      (unwind-protect
           (progn
@@ -165,11 +163,67 @@
   (:objc-class-name "CLMTKView")
   (:objc-superclass-name "MTKView"))
 
+(define-objc-property ("clearColor" metal-kit-view)
+  :accessor clear-color)
+
+(define-objc-property ("clearDepth" metal-kit-view)
+  :accessor clear-depth)
+
+(define-objc-property ("clearStencil" metal-kit-view)
+  :accessor clear-stencil)
+
+(define-objc-property ("colorPixelFormat" metal-kit-view)
+  :accessor color-pixel-format)
+
+(define-objc-property ("depthStencilPixelFormat" metal-kit-view)
+  :accessor depth-stencil-pixel-format)
+
+(define-objc-property ("sampleCount" metal-kit-view)
+  :accessor sample-count)
+
+(define-objc-property ("currentRenderPassDescriptor" metal-kit-view)
+  :reader current-render-pass-descriptor)
+
+(define-objc-property ("depthStencilTexture" metal-kit-view)
+  :reader depth-stencil-texture)
+
+(define-objc-property ("multisampleColorTexture" metal-kit-view)
+  :reader multisample-color-texture)
+
+(define-objc-property ("preferredFramesPerSecond" metal-kit-view)
+  :accessor preferred-frames-per-second)
+
+(define-objc-property ("nominalFramesPerSecond" metal-kit-view)
+  :accessor nominal-frames-per-second)
+
+(define-objc-property ("paused" metal-kit-view)
+  :accessor paused
+  :getter "isPaused")
+
+(define-objc-property ("enableSetNeedsDisplay" metal-kit-view)
+  :accessor enable-set-needs-display)
+
+(define-objc-property ("autoResizeDrawable" metal-kit-view)
+  :accessor auto-resize-drawable)
+
+(define-objc-property ("currentDrawable" metal-kit-view)
+  :reader current-drawable)
+
+(define-objc-property ("drawableSize" metal-kit-view)
+  :accessor drawable-size)
+
+(define-objc-property ("framebufferOnly" metal-kit-view)
+  :accessor framebuffer-only)
+
+(define-objc-property ("presentsWithTransaction" metal-kit-view)
+  :accessor presents-with-transaction)
+
 (objc:define-objc-method ("initWithFrame:" objc:objc-object-pointer)
     ((self metal-kit-view)
      (frame cocoa:ns-rect))
   (declare (ignore self))
   (when-let (self (objc:invoke (objc:current-super) "initWithFrame:" frame))
+    (initialize-metal)
     (objc:invoke self "setDevice:" *device*)
     ;; MTLPixelFormatBGRA8Unorm_sRGB
     (objc:invoke self "setColorPixelFormat:" 81)
@@ -189,18 +243,21 @@
 (objc:define-objc-method ("setFrameSize:" :void)
     ((self metal-kit-view)
      (size cocoa:ns-size))
-  (objc:invoke (objc:current-super) "setFrameSize:" size)
-  (objc:invoke (objc:objc-object-pointer self) "setNeedsDisplay:" t))
+  (objc:invoke (objc:current-super) "setFrameSize:" size))
 
-(objc:define-objc-method ("dealloc" :void)
-    ((self metal-kit-view))
+(defun dealloc-metal (&optional interface)
+  (declare (ignore interface))
   (release-var '*device*)
   (release-var '*command-queue*)
   (release-var '*texture-loader*)
   (loop
     for pipeline being the hash-values in *render-pipeline*
     do (objc:release pipeline))
-  (clrhash *render-pipeline*)
+  (clrhash *render-pipeline*))
+
+(objc:define-objc-method ("dealloc" :void)
+    ((self metal-kit-view))
+  (declare (ignore self))
   (objc:invoke (objc:current-super) "dealloc"))
 
 (defun metal-view-initializer (draw-callback offscreen-draw-callback frame)
@@ -222,24 +279,105 @@
                                                         offscreen-draw-callback
                                                         frame)))
 
-(defvar *pane*)
-(defvar *interface*)
+(capi:define-interface metal-application ()
+  ((draw-callback :initarg :draw-callback)
+   (offscreen-draw-callback :initarg :offscreen-draw-callback)
+   (frame :initarg :frame))
+  (:panes (metal-pane capi:cocoa-view-pane
+                      :view-class "CLMTKView"
+                      :accessor metal-pane
+                      :min-width 640
+                      :min-height 400)
+          (toolbar capi:push-button-panel)
+          (progress-bar capi:progress-bar
+                        :start 0
+                        :end 100)
+          (clear-color-red capi:slider
+                           :title "Clear Color Red"
+                           :start 0
+                           :end 255
+                           :tick-frequency 0
+                           :slug-start 0
+                           :callback 'change-clear-color-red)
+          (clear-color-green capi:slider
+                             :title "Clear Color Green"
+                             :start 0
+                             :end 255
+                             :tick-frequency 0
+                             :slug-start 0
+                             :callback 'change-clear-color-green)
+          (clear-color-blue capi:slider
+                            :title "Clear Color Blue"
+                            :start 0
+                            :end 255
+                            :tick-frequency 0
+                            :slug-start 0
+                            :callback 'change-clear-color-blue)
+          (clear-color-alpha capi:slider
+                             :title "Clear Color Alpha"
+                             :start 0
+                             :end 255
+                             :tick-frequency 0
+                             :slug-start 255
+                             :callback 'change-clear-color-alpha))
+  (:layouts (main capi:column-layout
+                  '(metal-pane
+                    clear-color-red
+                    clear-color-green
+                    clear-color-blue
+                    clear-color-alpha)))
+  (:default-initargs
+   :title ""
+   :window-styles '(:internal-borderless)))
+
+(defmethod initialize-instance :after ((self metal-application) &key)
+  (with-slots (draw-callback offscreen-draw-callback frame)
+      self
+    (initialize-metal)
+    (auto-compile-metal-library)
+    (setf (capi:cocoa-view-pane-init-function (metal-pane self))
+          (metal-view-initializer draw-callback
+                                  offscreen-draw-callback
+                                  frame))))
+
+(defvar *application* nil)
+
+(defun test-metal-application ()
+  (setf *application* (make-instance
+                       'metal-application
+                       :draw-callback 'test-draw-callback
+                       :offscreen-draw-callback 'test-offscreen-draw-callback
+                       :destroy-callback 'dealloc-metal
+                       :frame #(0 0 640 400)
+                       :best-x 570
+                       :best-y 0
+                       :visible-min-width 640
+                       :visible-min-height 600))
+  (capi:display *application*))
 
 (defun test-draw-callback ())
 
 (defun test-offscreen-draw-callback ())
 
-(defun test-metal-pane ()
-  (setf *pane* (make-metal-pane
-                :draw-callback 'test-draw-callback
-                :offscreen-draw-callback 'test-offscreen-draw-callback
-                :frame #(0 0 640 400)))
-  (setf *interface* (capi:make-container *pane*
-                                         :title ""
-                                         :window-styles '(:internal-borderless)
-                                         :best-x 570
-                                         :best-width 640
-                                         :best-height 400))
-  (capi:display *interface*))
+(defun change-clear-color (value index)
+  (let ((color (clear-color (metal-pane *application*))))
+    (setf (elt color index) (coerce (/ value 255) 'double-float))
+    (setf (clear-color (metal-pane *application*)) color)))
+
+(defun change-clear-color-red (interface value event)
+  (declare (ignore interface event))
+  (change-clear-color value 0))
+
+(defun change-clear-color-green (interface value event)
+  (declare (ignore interface event))
+  (change-clear-color value 1))
+
+(defun change-clear-color-blue (interface value event)
+  (declare (ignore interface event))
+  (change-clear-color value 2))
+
+(defun change-clear-color-alpha (interface value event)
+  (declare (ignore interface event))
+  (change-clear-color value 3))
 
 
