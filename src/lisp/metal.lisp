@@ -4,7 +4,6 @@
   (asdf:system-relative-pathname :metal "src/metal/Shaders.metal"))
 
 (defvar *view*)
-(defvar *device*)
 (defvar *library*)
 (defvar *descriptor*)
 (defvar *drawable*)
@@ -20,19 +19,6 @@
 (defvar *render-pipeline* (make-hash-table))
 (defvar *compute-pipeline* (make-hash-table))
 (defvar *blit-pipeline* (make-hash-table))
-
-(defun new (class)
-  (objc:autorelease (objc:alloc-init-object class)))
-
-(defun release-var (variable)
-  (when (boundp variable)
-    (objc:release (symbol-value variable))
-    (makunbound variable)))
-
-(defun ns-error (err)
-  (and (objc:objc-object-from-pointer err)
-       (error (objc:invoke-into 'string (fli:dereference err)
-                                "localizedDescription"))))
 
 (defun make-render-pipeline (name &key vertex-function
                                        fragment-function
