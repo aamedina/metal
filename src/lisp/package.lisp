@@ -1,7 +1,8 @@
 (defpackage :metal
   (:use :common-lisp
         :harlequin-common-lisp
-        :lispworks))
+        :lispworks
+        :system))
 
 (defvar *frameworks*
   '("/System/Library/Frameworks/Metal.framework/Metal"
