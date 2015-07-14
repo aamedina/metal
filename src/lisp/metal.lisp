@@ -10,7 +10,6 @@
 (defvar *texture-loader*)
 
 (defvar *command-queue*)
-(defvar *command-buffer*)
 (defvar *command-encoder*)
 
 (defvar *buffers* (make-hash-table))

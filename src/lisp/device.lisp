@@ -88,7 +88,7 @@
   (objc:objc-object-pointer objc:objc-object-pointer))
 
 (defun make-compute-pipeline-state (&key function
-                                         completion-handler
+                                         handler
                                          reflection
                                          (options :none))
   (cond
@@ -99,11 +99,12 @@
                  "newComputePipelineStateWithFunction:options:reflection:error:"
                  function (pipeline-state-options options) reflection err)))
          (or (ns-error err) o))))
-    (completion-handler
-     (objc:invoke
-      *device*
-      "newComputePipelineStateWithFunction:options:completionHandler:"
-      function (pipeline-state-options options) completion-handler))
+    (handler
+     (fli:with-foreign-block (handler 'compute-pipeline-state-handler handler)
+       (objc:invoke
+        *device*
+        "newComputePipelineStateWithFunction:options:completionHandler:"
+        function (pipeline-state-options options) handler)))
     (function
      (with-objc-reference (err)
        (let ((o (objc:invoke *device*
